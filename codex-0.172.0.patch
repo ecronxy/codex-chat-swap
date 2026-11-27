@@ -1,0 +1,94 @@
+diff --git i/codex-rs/tui/src/app/thread_routing.rs w/codex-rs/tui/src/app/thread_routing.rs
+index a0320d7..3b9c788 100644
+--- i/codex-rs/tui/src/app/thread_routing.rs
++++ w/codex-rs/tui/src/app/thread_routing.rs
+@@ -974,6 +974,19 @@ impl App {
+                 self.chat_widget.accept_realtime_speech(*delivery_id);
+                 Ok(true)
+             }
++            AppCommand::SwapAccount => {
++                // The local bridge handles this marker before it reaches the app server.
++                let result = app_server
++                    .thread_shell_command(thread_id, ": codex-chat-swap".into())
++                    .await;
++                match result {
++                    Ok(()) => self
++                        .chat_widget
++                        .add_info_message("Switched ChatGPT account.".into(), /*hint*/ None),
++                    Err(error) => self.chat_widget.add_error_message(format!("{error:#}")),
++                }
++                Ok(true)
++            }
+             AppCommand::RunUserShellCommand { command } => {
+                 if app_server.thread_params_mode()
+                     == crate::app_server_session::ThreadParamsMode::Cloud
+diff --git i/codex-rs/tui/src/app_command.rs w/codex-rs/tui/src/app_command.rs
+index 3bb5d5e..bf027e5 100644
+--- i/codex-rs/tui/src/app_command.rs
++++ w/codex-rs/tui/src/app_command.rs
+@@ -130,6 +130,7 @@ pub(crate) enum AppCommand {
+     RunUserShellCommand {
+         command: String,
+     },
++    SwapAccount,
+     UserTurn {
+         turn_trigger: &'static str,
+         cloud_submission: CloudSubmissionIntent,
+diff --git i/codex-rs/tui/src/chatwidget/slash_dispatch.rs w/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+index b4fd5e2..8bf1e15 100644
+--- i/codex-rs/tui/src/chatwidget/slash_dispatch.rs
++++ w/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+@@ -379,6 +379,9 @@ impl ChatWidget {
+             SlashCommand::Presets => {
+                 self.open_quick_dial_menu();
+             }
++            SlashCommand::Swap => {
++                self.submit_op(AppCommand::SwapAccount);
++            }
+             SlashCommand::Plan => {
+                 self.apply_plan_slash_command();
+             }
+@@ -1335,6 +1338,7 @@ impl ChatWidget {
+             | SlashCommand::Rc
+             | SlashCommand::Pwd
+             | SlashCommand::Usage
++            | SlashCommand::Swap
+             | SlashCommand::DebugConfig
+             | SlashCommand::Ps
+             | SlashCommand::Stop
+diff --git i/codex-rs/tui/src/slash_command.rs w/codex-rs/tui/src/slash_command.rs
+index 443f26d..650cffd 100644
+--- i/codex-rs/tui/src/slash_command.rs
++++ w/codex-rs/tui/src/slash_command.rs
+@@ -62,6 +62,7 @@ pub enum SlashCommand {
+     #[strum(to_string = "pwd", serialize = "cwd")]
+     Pwd,
+     Usage,
++    Swap,
+     DebugConfig,
+     Title,
+     Statusline,
+@@ -126,6 +127,7 @@ impl SlashCommand {
+             SlashCommand::Cd => "change the current working directory",
+             SlashCommand::Pwd => "show the current working directory",
+             SlashCommand::Usage => "view account usage or use a usage limit reset",
++            SlashCommand::Swap => "switch ChatGPT accounts in the current chat",
+             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
+             SlashCommand::Title => "configure which items appear in the terminal title",
+             SlashCommand::Statusline => "configure which items appear in the status line",
+@@ -274,6 +276,7 @@ impl SlashCommand {
+             | SlashCommand::Plan
+             | SlashCommand::Cd
+             | SlashCommand::Clear
++            | SlashCommand::Swap
+             | SlashCommand::Logout
+             | SlashCommand::MemoryDrop
+             | SlashCommand::MemoryUpdate => false,
+@@ -326,6 +329,7 @@ impl SlashCommand {
+             SlashCommand::Copy => !cfg!(target_os = "android"),
+             SlashCommand::App => cfg!(any(target_os = "macos", target_os = "windows")),
+             SlashCommand::Voice => true,
++            SlashCommand::Swap => std::env::var_os("CODEX_CHAT_SWAP").is_some(),
+             SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),
+             _ => true,
+         }

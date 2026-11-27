@@ -1,0 +1,52 @@
+diff --git i/src/xswap/providers/codex/codex_cli.py w/src/xswap/providers/codex/codex_cli.py
+index ae504b3..65e4144 100644
+--- i/src/xswap/providers/codex/codex_cli.py
++++ w/src/xswap/providers/codex/codex_cli.py
+@@ -337,6 +337,8 @@ async def serve_cli(
+     socket_path: Path,
+     bridge_class: type[WebSocketBridge] = WebSocketBridge,
+     stdout_relay: bool | None = None,
++    resume_launcher: str | None = None,
++    server_executable: str | None = None,
+ ) -> int:
+     """One TUI and one child server. No TCP listener and no TUI restart.
+ 
+@@ -365,7 +367,7 @@ async def serve_cli(
+                 await socket.close(1008, 'picker connection failed')
+             return
+         connected = True
+-        active_bridge = bridge_class(pool, [real, 'app-server', '--stdio', *server_overrides(args)],
++        active_bridge = bridge_class(pool, [server_executable or real, 'app-server', '--stdio', *server_overrides(args)],
+             env, socket=socket, status_path=status_path)
+         await client_ready.wait()
+         active_bridge.client_pid = cli.pid
+@@ -455,7 +457,7 @@ async def serve_cli(
+                 print(f'xswap auto: last failure in this session: {failure["event"]} ({failure["reason"]}); '
+                       f'see {log_path}.', file=sys.stderr)
+             for line in exit_notice(cli.returncode, getattr(active_bridge, 'resume_thread', None),
+-                                    reconnect_command(pool, env, active_bridge)):
++                                    reconnect_command(pool, env, active_bridge, resume_launcher)):
+                 print(line, file=sys.stderr)
+ 
+ 
+@@ -479,7 +481,10 @@ def exit_notice(status: int | None, thread: str | None, command: str | None) ->
+     return [f'xswap: {head}. Resume this conversation:', command]
+ 
+ 
+-def reconnect_command(pool: AccountPool, env: dict[str, str], bridge: Bridge | None) -> str | None:
++def reconnect_command(
++    pool: AccountPool, env: dict[str, str], bridge: Bridge | None,
++    resume_launcher: str | None = None,
++) -> str | None:
+     """Only emit a known conversation and shell-quoted, non-secret metadata."""
+     thread = getattr(bridge, 'resume_thread', None)
+     manager = getattr(pool, 'manager', None)
+@@ -489,6 +494,8 @@ def reconnect_command(pool: AccountPool, env: dict[str, str], bridge: Bridge | N
+     thread = next((t for t in candidates if saved_thread(env['CODEX_HOME'], t)), None)
+     if not thread:
+         return None
++    if resume_launcher:
++        return shlex.join([resume_launcher, 'resume', thread])
+     assert bridge is not None  # `thread` above is only truthy when getattr(bridge, ...) found one  # noqa: S101 -- narrows an invariant the checker can't see across the call; not user input
+     names = list(dict.fromkeys([bridge.current, *pool.names]))
+     return shlex.join(['env', 'CODEX_SWAP_HOME=' + str(manager.root),
